@@ -1,5 +1,5 @@
 # 将图片生成插件插入到 profile 的插件组合中
 - insert:
     - id: dsh-image-generator
-      name: '@local/dsh-image-generator'
+      name: 'dsh-image-generator'
       config: {}

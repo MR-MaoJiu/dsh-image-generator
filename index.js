@@ -358,6 +358,6 @@ export function apply(ctx, config) {
       'Load when the user asks to create, draw, or generate an image, illustration, poster, avatar, logo, or any visual from a text description.',
     source: 'dsh-image-generator',
     content: skill.content,
-    metadata: { bundle: '@local/dsh-image-generator' },
+    metadata: { bundle: 'dsh-image-generator' },
   })
 }

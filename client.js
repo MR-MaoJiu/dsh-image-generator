@@ -9,7 +9,7 @@
  *   - 失败：一行红色错误文字
  */
 window.__ModuleLoader__.load({
-  id: '@local/dsh-image-generator',
+  id: 'dsh-image-generator',
   factory(require) {
     'use strict'
 
