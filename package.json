@@ -1,0 +1,57 @@
+{
+  "name": "dsh-image-generator",
+  "version": "1.0.1",
+  "type": "module",
+  "description": "在对话中直接生成图片：内置 generate_image 工具与 image-generation 技能，配 Codex 风格生成动效",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "plugin",
+    "bundle",
+    "image",
+    "image-generation",
+    "codex",
+    "openai",
+    "pollinations",
+    "skill"
+  ],
+  "author": "MR-MaoJiu",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MR-MaoJiu/dsh-image-generator.git"
+  },
+  "homepage": "https://github.com/MR-MaoJiu/dsh-image-generator#readme",
+  "bugs": {
+    "url": "https://github.com/MR-MaoJiu/dsh-image-generator/issues"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "skills/*"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-tool",
+        "@deepseek-ai/dsh-client-ui-attachment",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  }
+}

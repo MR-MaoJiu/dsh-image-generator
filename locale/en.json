@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Image generator",
+    "description": "Generate images from text prompts in chat, with an animated generating card and an image-generation skill."
+  }
+}
