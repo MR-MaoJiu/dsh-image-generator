@@ -23,7 +23,7 @@ dsh plugin add git+https://github.com/MR-MaoJiu/dsh-image-generator.git
 ### 本地开发安装
 
 ```bash
-dsh plugin install /path/to/dsh-image-generator
+dsh plugin add /path/to/dsh-image-generator
 ```
 
 安装完成后重启或刷新 DSH 页面即可。插件会注册：
@@ -72,7 +72,7 @@ node --check client.js
 
 ```bash
 dsh plugin remove dsh-image-generator
-dsh plugin install ./dsh-image-generator
+dsh plugin add ./dsh-image-generator
 ```
 
 ## 许可证
