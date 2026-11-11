@@ -1,6 +1,6 @@
 {
   "name": "dsh-image-generator",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "icon": "./icon.svg",
   "type": "module",
   "description": "在对话中直接生成图片：内置 generate_image 工具与 image-generation 技能，配 Codex 风格生成动效",

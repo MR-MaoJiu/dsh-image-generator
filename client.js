@@ -32,6 +32,9 @@ window.__ModuleLoader__.load({
       /* 结果：图片直接展示 */
       '.gig_reveal{animation:gig_reveal 700ms cubic-bezier(.22,.8,.24,1) both}',
       '@keyframes gig_reveal{from{opacity:0;filter:blur(10px);transform:translateY(3px)}to{opacity:1;filter:blur(0);transform:none}}',
+      /* 兜底图库：官方 tool.call.images 槽位不可用时自行渲染 */
+      '.gig_gallery{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}',
+      '.gig_thumb{max-width:min(100%,360px);max-height:360px;border-radius:var(--dsw-radius-lg);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-fill-secondary,transparent);object-fit:contain}',
       /* 错误态 */
       '.gig_error{display:flex;align-items:flex-start;gap:8px;padding:4px 0;color:var(--dsw-alias-state-error-primary);font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);line-height:18px;word-break:break-word}',
       '.gig_error svg{flex:none;margin-top:2px;width:14px;height:14px}',
@@ -173,13 +176,70 @@ window.__ModuleLoader__.load({
       }
       const images = extractImages(block.content)
       if (images.length === 0) return null
+      return h('div', { className: 'gig_reveal' }, renderGallery({ images, loadImage, renderSlot }))
+    }
+
+    /** 官方图库不可用时（槽位缺失或渲染抛错）的兜底：走 Gateway 授权的 loadImage 取 URL。 */
+    function FallbackGallery({ images, loadImage }) {
+      const signature = images
+        .map((image) => (image && image.attachment && image.attachment.attachmentId) || '')
+        .join(',')
+      const [urls, setUrls] = React.useState([])
+      React.useEffect(() => {
+        let alive = true
+        if (typeof loadImage !== 'function') {
+          setUrls([])
+          return () => {
+            alive = false
+          }
+        }
+        Promise.all(
+          images.map((image) =>
+            Promise.resolve()
+              .then(() => loadImage(image))
+              .catch(() => null),
+          ),
+        ).then(
+          (resolved) => {
+            if (alive) setUrls(resolved)
+          },
+          () => {
+            if (alive) setUrls([])
+          },
+        )
+        return () => {
+          alive = false
+        }
+      }, [signature, loadImage])
+      const ready = urls.filter((url) => typeof url === 'string' && url.length > 0)
+      if (ready.length === 0) return null
       return h(
         'div',
-        { className: 'gig_reveal' },
-        typeof renderSlot === 'function'
-          ? renderSlot('tool.call.images', { images, loadImage, align: 'start' })
-          : null,
+        { className: 'gig_gallery' },
+        ready.map((url, index) =>
+          h('img', { key: index, className: 'gig_thumb', src: url, alt: '', loading: 'lazy' }),
+        ),
       )
+    }
+
+    /**
+     * 渲染结果图库。
+     *
+     * `tool.call.images` 子槽位由 core 的 read-image-toolview 独占声明——子槽位「只能被一个条目声明」，
+     * 第二个工具视图再声明同名子槽会在加载时抛 `slot "tool.call.images" is already declared`。
+     * 因此这里只复用、不声明：优先交给官方图库渲染（统一缩略图与放大行为），
+     * 槽位为空或渲染报错时退回本地图库，避免把整个 toolview 拖垮。
+     */
+    function renderGallery({ images, loadImage, renderSlot }) {
+      if (typeof renderSlot === 'function') {
+        try {
+          const rendered = renderSlot('tool.call.images', { images, loadImage, align: 'start' })
+          if (rendered !== null && rendered !== undefined && rendered !== false) return rendered
+        } catch (error) {
+          // 槽位不存在（例如官方 read_image 视图被禁用）时继续走兜底
+        }
+      }
+      return h(FallbackGallery, { images, loadImage })
     }
 
     /** toolview 入口：按 phase 分发。 */
@@ -200,9 +260,8 @@ window.__ModuleLoader__.load({
               name: 'tool.call.toolview',
               key: 'generate_image',
               locale: 'conversation',
-              children: {
-                'tool.call.images': { kind: 'single', scope: 'session' },
-              },
+              // 不声明 children：tool.call.images 已被 core 的 read-image-toolview 独占声明，
+              // 重复声明会在加载时抛错（子槽位只能由一个条目声明）。
             },
             GenerateImageToolview,
           ),
