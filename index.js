@@ -171,10 +171,12 @@ async function resolveCwd(ctx, exec) {
  *
  * 附件存储按内容寻址保存，文件名是一串 sha256、没有扩展名；把那个对象路径直接
  * 当作结果的 `path` 时，文件管理器与预览器都无法据此判断这是图片，表现就是
- * 「不是图片格式、打不开」。因此这里在工作目录下产出一份带 .png/.webp 扩展名
- * 的镜像文件，宿主的工作区文件预览也能正常打开。
+ * 「不是图片格式、打不开」。因此这里额外产出一份带 .png/.webp 扩展名的镜像文件。
  *
- * 默认直接落在工作目录根下；`outputDir` 可指定子目录，空串同样表示工作目录根。
+ * 落点是会话当前工作目录（`ctx.workingDirectory`，与 bash/read/write 等文件工具
+ * 解析相对路径用的是同一个目录，即当前项目目录）下的 `generated-images/`，
+ * 与项目里其他代码产物处在同一棵树里。这一行为对所有安装者一致，不依赖本机配置。
+ *
  * 同卷时用硬链接（零拷贝），跨卷退回复制；任何一步失败返回 undefined 由调用方降级。
  * @returns {string | undefined}
  */
@@ -182,9 +184,9 @@ function materializeOutput(cwd, config, attachments, ref, displayName) {
   const source = hostPathOf(attachments, ref)
   if (!source || !cwd) return undefined
   // 这里不能走 cfg()：它把空串视为“未设置”并回退默认值，
-  // 而 outputDir 需要用空串表示直接写到工作目录根、不建子目录。
+  // 而 outputDir 需要用空串表示直接写到项目目录根、不建子目录。
   const raw = config ? config.outputDir : undefined
-  const dirName = raw === undefined || raw === null ? '' : String(raw)
+  const dirName = raw === undefined || raw === null ? 'generated-images' : String(raw)
   const dir = dirName === '' ? cwd : join(cwd, dirName)
   const target = join(dir, displayName)
   try {
