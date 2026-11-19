@@ -12,7 +12,8 @@
  * 注意：不 import 任何 @deepseek-ai/* 包 —— bundle 以源目录链接方式加载，
  * Node ESM 无法解析宿主 asar 内的依赖；配置读取用 cfg() 兜底默认值。
  */
-import { readFileSync } from 'node:fs'
+import { copyFileSync, linkSync, mkdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 export const name = 'dsh-image-generator'
 export const inject = ['tools', 'skills']
@@ -143,6 +144,57 @@ function hostPathOf(attachments, ref) {
   try {
     const path = attachments.imageHostPath(ref)
     return typeof path === 'string' && path.length > 0 ? path : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 取会话当前工作目录，解析规则与官方文件工具一致
+ * （`ctx.workingDirectory.ensure(exec.agent, exec.signal)`）。拿不到时返回 undefined。
+ * @returns {Promise<string | undefined>}
+ */
+async function resolveCwd(ctx, exec) {
+  try {
+    const service = ctx?.get?.('workingDirectory')
+    if (!service || typeof service.ensure !== 'function') return undefined
+    if (!exec || exec.agent === undefined) return undefined
+    const cwd = await service.ensure(exec.agent, exec.signal)
+    return typeof cwd === 'string' && cwd.length > 0 ? cwd : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 把生成的图片落成一份**带扩展名的普通文件**，返回可直接双击打开的绝对路径。
+ *
+ * 附件存储按内容寻址保存，文件名是一串 sha256、没有扩展名；把那个对象路径直接
+ * 当作结果的 `path` 时，文件管理器与预览器都无法据此判断这是图片，表现就是
+ * 「不是图片格式、打不开」。因此这里在同一工作目录下产出一份带 .png/.webp 扩展名
+ * 的镜像文件，宿主的工作区文件预览也能正常打开。
+ *
+ * 同卷时用硬链接（零拷贝），跨卷退回复制；任何一步失败返回 undefined 由调用方降级。
+ * @returns {string | undefined}
+ */
+function materializeOutput(cwd, config, attachments, ref, displayName) {
+  const source = hostPathOf(attachments, ref)
+  if (!source || !cwd) return undefined
+  // 这里不能走 cfg()：它把空串视为“未设置”并回退默认值，
+  // 而 outputDir 需要用空串表示直接写到工作目录根、不建子目录。
+  const raw = config ? config.outputDir : undefined
+  const dirName = raw === undefined || raw === null ? 'generated-images' : String(raw)
+  const dir = dirName === '' ? cwd : join(cwd, dirName)
+  const target = join(dir, displayName)
+  try {
+    mkdirSync(dir, { recursive: true })
+    try {
+      linkSync(source, target)
+    } catch {
+      // 跨卷（EXDEV）或目标已存在时改用复制，覆盖同名旧文件
+      copyFileSync(source, target)
+    }
+    return target
   } catch {
     return undefined
   }
@@ -373,10 +425,16 @@ export function apply(ctx, config) {
         // 展示名按真实 mediaType 纠正，避免扩展名与内容不符。
         const displayName = `generated-${stamp}.${extensionOf(ref.mediaType)}`
 
+        // 优先产出工作区内带扩展名的镜像文件，宿主预览与文件管理器都能直接打开；
+        // 退化时依次回落到附件对象路径、最后是展示名，保证 path 总有值。
+        const cwd = await resolveCwd(ctx, exec)
+        const outputPath =
+          materializeOutput(cwd, config, attachments, ref, displayName) ??
+          hostPathOf(attachments, ref) ??
+          displayName
+
         return {
-          // path 必须是可打开的绝对路径：附件按内容寻址存于 DSH_HOME 下，
-          // 回退到裸文件名会让宿主的文件预览按工作区相对路径去开、报「文件不存在」。
-          path: hostPathOf(attachments, ref) ?? displayName,
+          path: outputPath,
           image: { ...ref, name: displayName },
           prompt,
           size: `${size.width}x${size.height}`,
