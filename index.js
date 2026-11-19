@@ -171,9 +171,10 @@ async function resolveCwd(ctx, exec) {
  *
  * 附件存储按内容寻址保存，文件名是一串 sha256、没有扩展名；把那个对象路径直接
  * 当作结果的 `path` 时，文件管理器与预览器都无法据此判断这是图片，表现就是
- * 「不是图片格式、打不开」。因此这里在同一工作目录下产出一份带 .png/.webp 扩展名
+ * 「不是图片格式、打不开」。因此这里在工作目录下产出一份带 .png/.webp 扩展名
  * 的镜像文件，宿主的工作区文件预览也能正常打开。
  *
+ * 默认直接落在工作目录根下；`outputDir` 可指定子目录，空串同样表示工作目录根。
  * 同卷时用硬链接（零拷贝），跨卷退回复制；任何一步失败返回 undefined 由调用方降级。
  * @returns {string | undefined}
  */
@@ -183,7 +184,7 @@ function materializeOutput(cwd, config, attachments, ref, displayName) {
   // 这里不能走 cfg()：它把空串视为“未设置”并回退默认值，
   // 而 outputDir 需要用空串表示直接写到工作目录根、不建子目录。
   const raw = config ? config.outputDir : undefined
-  const dirName = raw === undefined || raw === null ? 'generated-images' : String(raw)
+  const dirName = raw === undefined || raw === null ? '' : String(raw)
   const dir = dirName === '' ? cwd : join(cwd, dirName)
   const target = join(dir, displayName)
   try {

@@ -54,20 +54,29 @@ dsh plugin add /path/to/dsh-image-generator
 | `pollinationsModel` | `flux` | 免费后端模型 |
 | `pollinationsEnhance` | `false` | 免费后端是否开启提示词增强 |
 | `timeoutMs` | `120000` | 单次生成超时 |
-| `outputDir` | `generated-images` | 生成图片在工作目录下落盘的子目录；设为空串则直接写到工作目录根 |
+| `outputDir` | 空 | 生成图片在工作目录下的落盘子目录；默认空串表示直接写到工作目录根 |
 
 > 未配置 OpenAI key 时自动使用 Pollinations 免费后端（同 IP 每 45 秒 1 张，尺寸会被服务端缩放）。
 
 ### 生成的图片落在哪
 
-生成结果会在**会话工作目录**下产出一份带扩展名的普通图片文件（默认 `generated-images/generated-<时间戳>.png`），工具结果里的路径就指向它，可直接用系统看图软件打开。
+生成结果会直接落在**会话工作目录**下，产出带扩展名的普通图片文件（`generated-<时间戳>.png`），工具结果里的路径就指向它，可直接用系统看图软件打开。
 
 附件存储本身是按内容寻址的（文件名是一串 sha256、没有扩展名），无法按扩展名识别为图片，因此这里额外产出一份普通文件，而不是把存储对象路径直接作为结果路径。
 
-工作区如果是 Git 仓库，建议忽略这个目录：
+工作区如果是 Git 仓库，建议忽略这些文件：
 
 ```gitignore
-generated-images/
+generated-*.png
+generated-*.webp
+generated-*.jpg
+```
+
+不想放在根目录时，可以用 `outputDir` 指定子目录：
+
+```yaml
+config:
+  outputDir: images
 ```
 
 ## 使用
