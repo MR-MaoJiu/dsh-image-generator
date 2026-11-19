@@ -2,7 +2,7 @@
 
 在 DeepSeek Harness（DSH）对话中直接生成图片的插件：内置 `generate_image` 工具与 `image-generation` 技能，生成过程带 Codex 风格的进度动效，结果以原生大图直接展示。
 
-![示例：社交产品 UI 概念图](docs/example-social-ui.png)
+![示例：社交产品 UI 概念图](https://raw.githubusercontent.com/MR-MaoJiu/dsh-image-generator/main/docs/example-social-ui.png)
 
 ## 特性
 
@@ -14,11 +14,21 @@
 
 ## 安装
 
+### 从 npm 安装（推荐）
+
+```bash
+dsh plugin add dsh-image-generator
+```
+
+以 npm 形式安装的插件，DSH 会在插件页刷新时检查 registry 上是否有更新版本，并在有新版本时给出更新提示。
+
 ### 从 GitHub 安装
 
 ```bash
 dsh plugin add git+https://github.com/MR-MaoJiu/dsh-image-generator.git
 ```
+
+> 注意：GitHub 直装不会收到更新提示。DSH 只对「npm 包名」或「pin 到完整 40 位 commit 的 Git 依赖」两者之一的安装检查更新，而 `github:owner/repo` 这种形式两者都不满足，`update` 能力为 `undefined`，因此界面上不会出现更新入口。想跟进新版本请使用上面的 npm 方式。
 
 ### 本地开发安装
 
