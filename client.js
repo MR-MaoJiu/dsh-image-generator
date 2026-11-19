@@ -38,6 +38,8 @@ window.__ModuleLoader__.load({
       /* 错误态 */
       '.gig_error{display:flex;align-items:flex-start;gap:8px;padding:4px 0;color:var(--dsw-alias-state-error-primary);font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);line-height:18px;word-break:break-word}',
       '.gig_error svg{flex:none;margin-top:2px;width:14px;height:14px}',
+      /* 加载失败后的重试入口 */
+      '.gig_retry{flex:none;margin-left:2px;padding:0 8px;border:.5px solid currentColor;border-radius:999px;background:transparent;color:inherit;font:inherit;line-height:18px;cursor:pointer}',
       /* 轻提示 */
       '.gig_hint{font-size:calc(var(--dsh-content-font-size-secondary,13px) - 1px);color:var(--dsw-alias-label-tertiary);padding:2px 0}',
     ].join('\n')
@@ -179,40 +181,93 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'gig_reveal' }, renderGallery({ images, loadImage, renderSlot }))
     }
 
-    /** 官方图库不可用时（槽位缺失或渲染抛错）的兜底：走 Gateway 授权的 loadImage 取 URL。 */
+    /**
+     * 同步读取已解析的图片 URL。
+     *
+     * `MessageImageLoader` 带可选 `peek`：同一附件之前解析过即可直接拿到 URL，
+     * 用它做首帧初值，避免出图后先闪一帧空白再补图。
+     */
+    function peekUrl(loadImage, attachment) {
+      if (!attachment || typeof loadImage !== 'function') return ''
+      if (typeof loadImage.peek !== 'function') return ''
+      try {
+        const url = loadImage.peek(attachment)
+        return typeof url === 'string' ? url : ''
+      } catch (error) {
+        return ''
+      }
+    }
+
+    /**
+     * 本地图库：走 Chat 下发的 Gateway 授权 loader 取 URL。
+     *
+     * 注意 loader 的契约是 `(attachment) => Promise<string>`，入参是**附件引用本身**
+     * （`{ attachmentId, mediaType, bytes, width, height }`），不是 `{ attachment }`
+     * 包装对象；传错会让每一次加载都 reject，整块结果静默变空白。
+     */
     function FallbackGallery({ images, loadImage }) {
       const signature = images
         .map((image) => (image && image.attachment && image.attachment.attachmentId) || '')
         .join(',')
-      const [urls, setUrls] = React.useState([])
+      const [urls, setUrls] = React.useState(() =>
+        images.map((image) => peekUrl(loadImage, image && image.attachment)),
+      )
+      // 重试计数：每次点击重试让 effect 重跑一遍加载
+      const [attempt, setAttempt] = React.useState(0)
+      const [failed, setFailed] = React.useState(false)
+
       React.useEffect(() => {
         let alive = true
         if (typeof loadImage !== 'function') {
-          setUrls([])
+          setUrls(images.map(() => ''))
+          setFailed(true)
           return () => {
             alive = false
           }
         }
+        // 先用同步缓存补一版，随后异步解析补齐未命中的项
+        const seeded = images.map((image) => peekUrl(loadImage, image && image.attachment))
+        if (seeded.some(Boolean)) setUrls(seeded)
+
         Promise.all(
           images.map((image) =>
             Promise.resolve()
-              .then(() => loadImage(image))
-              .catch(() => null),
+              .then(() => loadImage(image && image.attachment))
+              .then((url) => (typeof url === 'string' ? url : ''))
+              .catch(() => ''),
           ),
-        ).then(
-          (resolved) => {
-            if (alive) setUrls(resolved)
-          },
-          () => {
-            if (alive) setUrls([])
-          },
-        )
+        ).then((resolved) => {
+          if (!alive) return
+          setUrls(resolved)
+          setFailed(resolved.every((url) => !url))
+        })
         return () => {
           alive = false
         }
-      }, [signature, loadImage])
+      }, [signature, loadImage, attempt])
+
       const ready = urls.filter((url) => typeof url === 'string' && url.length > 0)
-      if (ready.length === 0) return null
+      if (ready.length === 0) {
+        // 拿不到 URL 时给一行可重试的提示，不再静默返回空，便于用户区分“没生成”和“加载失败”
+        if (!failed) return null
+        return h(
+          'div',
+          { className: 'gig_error' },
+          h('span', null, '图片已生成，但预览加载失败'),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'gig_retry',
+              onClick: () => {
+                setFailed(false)
+                setAttempt((value) => value + 1)
+              },
+            },
+            '重试',
+          ),
+        )
+      }
       return h(
         'div',
         { className: 'gig_gallery' },
@@ -227,8 +282,10 @@ window.__ModuleLoader__.load({
      *
      * `tool.call.images` 子槽位由 core 的 read-image-toolview 独占声明——子槽位「只能被一个条目声明」，
      * 第二个工具视图再声明同名子槽会在加载时抛 `slot "tool.call.images" is already declared`。
-     * 因此这里只复用、不声明：优先交给官方图库渲染（统一缩略图与放大行为），
-     * 槽位为空或渲染报错时退回本地图库，避免把整个 toolview 拖垮。
+     * 而组件 props 的 `renderSlot` 只在**本条目声明了 children** 时才会被注入
+     * （renderer 的 scoped-slots：`if (entry.children !== undefined) kit.renderSlot = …`），
+     * 所以这里正常情况下拿不到 `renderSlot`，图片由本地图库渲染；
+     * 保留该分支只为兼容“宿主授权了子槽位”的组合，不声明时它自然不生效。
      */
     function renderGallery({ images, loadImage, renderSlot }) {
       if (typeof renderSlot === 'function') {
@@ -236,7 +293,7 @@ window.__ModuleLoader__.load({
           const rendered = renderSlot('tool.call.images', { images, loadImage, align: 'start' })
           if (rendered !== null && rendered !== undefined && rendered !== false) return rendered
         } catch (error) {
-          // 槽位不存在（例如官方 read_image 视图被禁用）时继续走兜底
+          // 槽位未授权（未声明 children，或官方 read_image 视图被禁用）时继续走本地图库
         }
       }
       return h(FallbackGallery, { images, loadImage })

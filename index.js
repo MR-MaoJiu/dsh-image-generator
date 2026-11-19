@@ -118,6 +118,36 @@ function truncate(text, max) {
   return value.length > max ? `${value.slice(0, max)}…` : value
 }
 
+/** 按 mediaType 给出文件扩展名（附件归一化后以 ref.mediaType 为准）。 */
+function extensionOf(mediaType) {
+  switch (mediaType) {
+    case 'image/jpeg':
+      return 'jpg'
+    case 'image/webp':
+      return 'webp'
+    case 'image/gif':
+      return 'gif'
+    default:
+      return 'png'
+  }
+}
+
+/**
+ * 取附件在宿主文件系统上的绝对路径。
+ * 宿主文件预览按路径打开文件，因此结果里的 `path` 必须是真实存在的绝对路径，
+ * 不能是展示名。后端不支持宿主文件（或引用不合法）时返回 undefined。
+ * @returns {string | undefined}
+ */
+function hostPathOf(attachments, ref) {
+  if (typeof attachments?.imageHostPath !== 'function') return undefined
+  try {
+    const path = attachments.imageHostPath(ref)
+    return typeof path === 'string' && path.length > 0 ? path : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * 从图片后端取回图片字节。
  * @returns {Promise<{ data: Uint8Array, mediaType: string }>}
@@ -333,14 +363,21 @@ export function apply(ctx, config) {
 
         const attachments = ctx.get('attachments')
         if (!attachments) throw new Error('附件服务不可用，无法保存生成的图片')
-        const extension =
-          mediaType === 'image/jpeg' ? 'jpg' : mediaType === 'image/webp' ? 'webp' : 'png'
-        const fileName = `generated-${Date.now()}.${extension}`
-        const ref = await attachments.saveImage({ data, mediaType, name: fileName })
+        const stamp = Date.now()
+        const ref = await attachments.saveImage({
+          data,
+          mediaType,
+          name: `generated-${stamp}.${extensionOf(mediaType)}`,
+        })
+        // 归一化可能改变落盘格式（透明 PNG → WebP，不透明 → JPEG），
+        // 展示名按真实 mediaType 纠正，避免扩展名与内容不符。
+        const displayName = `generated-${stamp}.${extensionOf(ref.mediaType)}`
 
         return {
-          path: fileName,
-          image: { ...ref },
+          // path 必须是可打开的绝对路径：附件按内容寻址存于 DSH_HOME 下，
+          // 回退到裸文件名会让宿主的文件预览按工作区相对路径去开、报「文件不存在」。
+          path: hostPathOf(attachments, ref) ?? displayName,
+          image: { ...ref, name: displayName },
           prompt,
           size: `${size.width}x${size.height}`,
           provider,
